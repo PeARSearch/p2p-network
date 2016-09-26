@@ -1,7 +1,8 @@
 import sys, os
-import argparse
+import argparse, socket
 import numpy, math
 import twisted.internet.reactor
+from common_vars import alpha, beta, W
 from entangled.node import EntangledNode
 from entangled.kademlia.datastore import SQLiteDataStore
 
@@ -25,11 +26,9 @@ def stop():
 def lsh():
     # TODO: Get the pear profile from the PeARS instance using the TODO API
     pear_profile = numpy.loadtxt('pear_profile.txt')
-    W = 2
-    alpha = numpy.random.normal(0,1, 400)
-    beta = numpy.random.uniform(0, W)
-    lsh_hash = (numpy.dot(alpha, pear_profile) + beta)/W
-    return abs(math.floor(lsh_hash))
+    alpha_array = numpy.loadtxt(alpha)
+    lsh_hash = (numpy.dot(alpha_array, pear_profile) + beta)/W
+    return int(abs(math.floor(lsh_hash)))
 
 def main(args):
     arg = parse_arguments(args)
@@ -56,7 +55,7 @@ def main(args):
     KEY = lsh()
     # Bit of a hack. But this return the IP correctly. Just gethostname
     # sometimes returns 127.0.0.1
-    VALUE = ([l for l in ([ip for ip in
+    VALUE =  ([l for l in ([ip for ip in
         socket.gethostbyname_ex(socket.gethostname())[2] if not
         ip.startswith("127.")][:1], [[(s.connect(('8.8.8.8', 53)),
             s.getsockname()[0], s.close()) for s in
