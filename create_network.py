@@ -1,6 +1,6 @@
 import sys, os
 import argparse
-import numpy
+import numpy, math
 import twisted.internet.reactor
 from entangled.node import EntangledNode
 from entangled.kademlia.datastore import SQLiteDataStore
@@ -21,6 +21,15 @@ def stop():
     """ Stops the Twisted reactor, and thus the script """
     print '\nStopping Kademlia node and terminating script...'
     twisted.internet.reactor.stop()
+
+def lsh():
+    # TODO: Get the pear profile from the PeARS instance using the TODO API
+    pear_profile = numpy.loadtxt('pear_profile.txt')
+    W = 2
+    alpha = numpy.random.normal(0,1, 400)
+    beta = numpy.random.uniform(0, W)
+    lsh_hash = (numpy.dot(alpha, pear_profile) + beta)/W
+    return abs(math.floor(lsh_hash))
 
 def main(args):
     arg = parse_arguments(args)
@@ -43,11 +52,17 @@ def main(args):
         os.remove('/tmp/dbFile%s.db' % sys.argv[1])
     data_store = SQLiteDataStore(dbFile = '/tmp/db_file_dht%s.db' % port)
 
-    # TODO: Get the pear profile from the PeARS instance using the TODO API
-    pear_profile = numpy.loadtxt('pear_profile.txt')
-    # TODO: Create Key and Value using LSH
-    KEY = "dummy"
-    VALUE = "dummy"
+    # Generate the Key from the peer profile
+    KEY = lsh()
+    # Bit of a hack. But this return the IP correctly. Just gethostname
+    # sometimes returns 127.0.0.1
+    VALUE = ([l for l in ([ip for ip in
+        socket.gethostbyname_ex(socket.gethostname())[2] if not
+        ip.startswith("127.")][:1], [[(s.connect(('8.8.8.8', 53)),
+            s.getsockname()[0], s.close()) for s in
+            [socket.socket(socket.AF_INET, socket.SOCK_DGRAM)]][0][1]])
+        if l][0][0])
+
     node = EntangledNode(udpPort=int(port), dataStore=data_store)
     node.joinNetwork(known_nodes)
     twisted.internet.reactor.callLater(2.5, storeValue, KEY, VALUE, node)
