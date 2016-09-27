@@ -53,6 +53,7 @@ def main(args):
 
     # Generate the Key from the peer profile
     KEY = lsh()
+    KEY = str(lsh())
     # Bit of a hack. But this return the IP correctly. Just gethostname
     # sometimes returns 127.0.0.1
     VALUE =  ([l for l in ([ip for ip in
