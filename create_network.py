@@ -52,7 +52,6 @@ def main(args):
     data_store = SQLiteDataStore(dbFile = '/tmp/db_file_dht%s.db' % port)
 
     # Generate the Key from the peer profile
-    KEY = lsh()
     KEY = str(lsh())
     # Bit of a hack. But this return the IP correctly. Just gethostname
     # sometimes returns 127.0.0.1
