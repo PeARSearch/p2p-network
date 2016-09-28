@@ -1,10 +1,15 @@
 import sys, os
+from io import StringIO
+import cStringIO
 import argparse, socket
 import numpy, math
-import twisted.internet.reactor
+from twisted.internet import reactor
 from common_vars import alpha, beta, W
 from entangled.node import EntangledNode
 from entangled.kademlia.datastore import SQLiteDataStore
+from twisted.internet.protocol import Factory, Protocol
+
+node = None
 
 def storeValue(key, value, node):
     """ Stores the specified value in the DHT using the specified key """
@@ -16,21 +21,50 @@ def storeValue(key, value, node):
 def genericErrorCallback(failure):
     """ Callback function that is invoked if an error occurs during any of the DHT operations """
     print 'An error has occurred:', failure.getErrorMessage()
-    twisted.internet.reactor.callLater(0, stop)
+    reactor.callLater(0, stop)
 
 def stop():
     """ Stops the Twisted reactor, and thus the script """
     print '\nStopping Kademlia node and terminating script...'
-    twisted.internet.reactor.stop()
+    reactor.stop()
 
-def lsh():
+def getValue(key):
+    """ Retrieves the value of the specified key (KEY) from the DHT """
+    global node
+    # Get the value for the specified key (immediately returns a Twisted deferred result)
+    print '\nRetrieving value from DHT for key "%s"...' % key
+    deferredResult = node.iterativeFindValue(key)
+    # Add a callback to this result; this will be called as soon as the operation has completed
+    deferredResult.addCallback(getValueCallback)
+    # As before, add the generic error callback
+    deferredResult.addErrback(genericErrorCallback)
+
+
+def getValueCallback(result):
+    """ Callback function that is invoked when the getValue() operation succeeds """
+    # Check if the key was found (result is a dict of format {key: value}) or not (in which case a list of "closest" Kademlia contacts would be returned instead")
+    if type(result) == dict:
+        print 'Value successfully retrieved: %s' % result[KEY]
+    else:
+        print 'Value not found'
+
+class PeARSearch(Protocol):
+    def dataReceived(self, query_vector):
+        query_vector =query_vector.strip().encode('utf-8')
+        query = cStringIO.StringIO(query_vector)
+        query_vector = numpy.loadtxt(query)
+        query_key = str(lsh(query_vector))
+        reactor.callLater(0, getValue, key=query_key)
+
+def lsh(vector):
     # TODO: Get the pear profile from the PeARS instance using the TODO API
-    pear_profile = numpy.loadtxt('pear_profile.txt')
+    alpha.seek(0)
     alpha_array = numpy.loadtxt(alpha)
-    lsh_hash = (numpy.dot(alpha_array, pear_profile) + beta)/W
+    lsh_hash = (numpy.dot(alpha_array, vector) + beta)/W
     return int(abs(math.floor(lsh_hash)))
 
 def main(args):
+    global node
     arg = parse_arguments(args)
     port = arg.udp_port
     if arg.known_ip and arg.known_port:
@@ -52,7 +86,8 @@ def main(args):
     data_store = SQLiteDataStore(dbFile = '/tmp/db_file_dht%s.db' % port)
 
     # Generate the Key from the peer profile
-    KEY = str(lsh())
+    pear_profile = numpy.loadtxt('pear_profile.txt')
+    KEY = str(lsh(pear_profile))
     # Bit of a hack. But this return the IP correctly. Just gethostname
     # sometimes returns 127.0.0.1
     VALUE =  ([l for l in ([ip for ip in
@@ -62,11 +97,15 @@ def main(args):
             [socket.socket(socket.AF_INET, socket.SOCK_DGRAM)]][0][1]])
         if l][0][0])
 
+    factory = Factory()
+    factory.protocol = PeARSearch
+    factory.clients = []
     node = EntangledNode(udpPort=int(port), dataStore=data_store)
     node.joinNetwork(known_nodes)
-    twisted.internet.reactor.callLater(2.5, storeValue, KEY, VALUE, node)
+    reactor.callLater(0, storeValue, KEY, VALUE, node)
+    reactor.listenTCP(8080, factory)
     print "Starting the DHT node..."
-    twisted.internet.reactor.run()
+    reactor.run()
 
 def parse_arguments(args=None):
     usage = "create_network UDP_PORT [KNOWN_NODE_IP  KNOWN_NODE_PORT] "\
