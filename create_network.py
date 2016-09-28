@@ -35,16 +35,16 @@ def getValue(key):
     print '\nRetrieving value from DHT for key "%s"...' % key
     deferredResult = node.iterativeFindValue(key)
     # Add a callback to this result; this will be called as soon as the operation has completed
-    deferredResult.addCallback(getValueCallback)
+    deferredResult.addCallback(getValueCallback, key=key)
     # As before, add the generic error callback
     deferredResult.addErrback(genericErrorCallback)
 
 
-def getValueCallback(result):
+def getValueCallback(result, key):
     """ Callback function that is invoked when the getValue() operation succeeds """
     # Check if the key was found (result is a dict of format {key: value}) or not (in which case a list of "closest" Kademlia contacts would be returned instead")
     if type(result) == dict:
-        print 'Value successfully retrieved: %s' % result[KEY]
+        print 'Value successfully retrieved: %s' % result[key]
     else:
         print 'Value not found'
 
