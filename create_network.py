@@ -38,6 +38,7 @@ def getValue(key):
     deferredResult.addCallback(getValueCallback, key=key)
     # As before, add the generic error callback
     deferredResult.addErrback(genericErrorCallback)
+    return deferredResult
 
 
 def getValueCallback(result, key):
@@ -45,16 +46,34 @@ def getValueCallback(result, key):
     # Check if the key was found (result is a dict of format {key: value}) or not (in which case a list of "closest" Kademlia contacts would be returned instead")
     if type(result) == dict:
         print 'Value successfully retrieved: %s' % result[key]
+        return result[key]
     else:
         print 'Value not found'
+        return None
 
 class PeARSearch(Protocol):
     def dataReceived(self, query_vector):
-        query_vector = re.split(r'[\n\r]+', query_vector)[-1].strip('"').encode('utf-8')
-        query = cStringIO.StringIO(query_vector)
-        query_vector = numpy.loadtxt(query)
+        query = re.split(r'[\n\r]+', query_vector)
+        query_vector = query[-1].strip('"').encode('utf-8')
+        q = cStringIO.StringIO(query_vector)
+        query_vector = numpy.loadtxt(q)
         query_key = str(lsh(query_vector))
-        reactor.callLater(0, getValue, key=query_key)
+        ret = getValue(key=query_key)
+        prot = '/'.join(query[0].split('/')[1:]).strip()
+        status = ' 200 OK\n' if ret.result else ' 404 Not Found\n'
+        body = ret.result
+        length = len(body) if body else 0
+        response_headers = {
+            'Content-Type': 'text/html; encoding=utf8',
+            'Content-Length': length,
+            'Connection': 'close',
+        }
+        response_headers_raw = '\n' + ''.join('%s: %s\n' % (k, v) for k, v in \
+                                                response_headers.iteritems())
+        response = ''.join([prot, status, response_headers_raw, body or
+            ''])
+        self.transport.write(response)
+        self.transport.loseConnection()
 
 def lsh(vector):
     # TODO: Get the pear profile from the PeARS instance using the TODO API
