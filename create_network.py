@@ -1,4 +1,4 @@
-import sys, os
+import sys, os, re
 from io import StringIO
 import cStringIO
 import argparse, socket
@@ -50,7 +50,7 @@ def getValueCallback(result, key):
 
 class PeARSearch(Protocol):
     def dataReceived(self, query_vector):
-        query_vector =query_vector.strip().encode('utf-8')
+        query_vector = re.split(r'[\n\r]+', query_vector)[-1].strip('"').encode('utf-8')
         query = cStringIO.StringIO(query_vector)
         query_vector = numpy.loadtxt(query)
         query_key = str(lsh(query_vector))
