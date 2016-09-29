@@ -1,5 +1,6 @@
 Twisted==16.4.1
 argparse==1.2.1
-entangled==0.1
+numpy==1.9.2
+requests==2.9.0
 wsgiref==0.1.2
 zope.interface==4.3.2
