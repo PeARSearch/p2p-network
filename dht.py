@@ -4,7 +4,7 @@
 import sys, os, re
 from io import StringIO
 import cStringIO
-import argparse, socket
+import argparse, socket, ipgetter
 import numpy, math
 from twisted.internet import reactor
 from common_vars import alpha, beta, W
@@ -31,27 +31,41 @@ def stop():
     print '\nStopping Kademlia node and terminating script...'
     reactor.stop()
 
-def getValue(key):
+def getValue(p2p, key):
     """ Retrieves the value of the specified key (KEY) from the DHT """
     global node
     # Get the value for the specified key (immediately returns a Twisted deferred result)
     print '\nRetrieving value from DHT for key "%s"...' % key
     deferredResult = node.iterativeFindValue(key)
     # Add a callback to this result; this will be called as soon as the operation has completed
-    deferredResult.addCallback(getValueCallback, key=key)
+    deferredResult.addCallback(getValueCallback, p2p=p2p, key=key)
     # As before, add the generic error callback
     deferredResult.addErrback(genericErrorCallback)
     return deferredResult
 
 
-def getValueCallback(result, key):
+def getValueCallback(result, p2p, key):
     """ Callback function that is invoked when the getValue() operation succeeds """
     if type(result) == dict:
         print 'Value successfully retrieved: %s' % result[key]
-        return result[key]
+        status = ' 200 OK\n'
+        body = result[key]
     else:
         print 'Value not found'
-        return None
+        status = ' 404 Not Found\n'
+        body = ''
+    prot = 'HTTP/1.1'
+    length = len(body) if body else 0
+    response_headers = {
+        'Content-Type': 'text/html; encoding=utf8',
+        'Content-Length': length,
+        'Connection': 'close',
+    }
+    response_headers_raw = '\n' + ''.join('%s: %s\n' % (k, v) for k, v in \
+                                            response_headers.iteritems())
+    response = ''.join([prot, status, response_headers_raw, body])
+    p2p.transport.write(response)
+    p2p.transport.loseConnection()
 
 class PeARSearch(Protocol):
     def dataReceived(self, query_vector):
@@ -60,22 +74,7 @@ class PeARSearch(Protocol):
         q = cStringIO.StringIO(query_vector)
         query_vector = numpy.loadtxt(q)
         query_key = str(lsh(query_vector))
-        ret = getValue(key=query_key)
-        prot = '/'.join(query[0].split('/')[1:]).strip()
-        status = ' 200 OK\n' if ret.result else ' 404 Not Found\n'
-        body = ret.result
-        length = len(body) if body else 0
-        response_headers = {
-            'Content-Type': 'text/html; encoding=utf8',
-            'Content-Length': length,
-            'Connection': 'close',
-        }
-        response_headers_raw = '\n' + ''.join('%s: %s\n' % (k, v) for k, v in \
-                                                response_headers.iteritems())
-        response = ''.join([prot, status, response_headers_raw, body or
-            ''])
-        self.transport.write(response)
-        self.transport.loseConnection()
+        getValue(self, key=query_key)
 
 def lsh(vector):
     # TODO: Get the pear profile from the PeARS instance using the TODO API
@@ -117,6 +116,9 @@ def main(args):
             s.getsockname()[0], s.close()) for s in
             [socket.socket(socket.AF_INET, socket.SOCK_DGRAM)]][0][1]])
         if l][0][0])
+    # The real setup should use the following to get external IP. I am
+    # using the one above since I use docker
+    # VALUE = str(ipgetter.myip())
 
     factory = Factory()
     factory.protocol = PeARSearch
