@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import sys, os, re
+import requests
 from io import StringIO
 import cStringIO
 import argparse, socket, ipgetter
@@ -83,6 +84,28 @@ def lsh(vector):
     lsh_hash = (numpy.dot(alpha_array, vector) + beta)/W
     return int(abs(math.floor(lsh_hash)))
 
+def cleanup(KEY, node):
+    """ Removes the the specified key (KEY) its associated value from the DHT """
+    print '\nDeleting key/value from DHT...'
+    deferredResult = node.iterativeDelete(KEY)
+    # Add our callback
+    deferredResult.addCallback(deleteValueCallback)
+    # As before, add the generic error callback
+    deferredResult.addErrback(genericErrorCallback)
+
+
+def deleteValueCallback(result):
+    """ Callback function that is invoked when the deleteValue() operation succeeds """
+    print 'Key/value pair deleted'
+    # Stop the script after 1 second
+    twisted.internet.reactor.callLater(1.0, stop)
+
+
+def stop():
+    """ Stops the Twisted reactor, and thus the script """
+    print '\nStopping Kademlia node and terminating script...'
+    twisted.internet.reactor.stop()
+
 def main(args):
     global node
     arg = parse_arguments(args)
@@ -106,19 +129,21 @@ def main(args):
     data_store = SQLiteDataStore(dbFile = '/tmp/db_file_dht%s.db' % port)
 
     # Generate the Key from the peer profile
-    pear_profile = numpy.loadtxt('pear_profile.txt')
+    r = requests.get('http://localhost:5000/api/profile')
+    val = cStringIO.StringIO(str(r.text))
+    pear_profile = numpy.loadtxt(val)
     KEY = str(lsh(pear_profile))
     # Bit of a hack. But this return the IP correctly. Just gethostname
     # sometimes returns 127.0.0.1
-    VALUE =  ([l for l in ([ip for ip in
-        socket.gethostbyname_ex(socket.gethostname())[2] if not
-        ip.startswith("127.")][:1], [[(s.connect(('8.8.8.8', 53)),
-            s.getsockname()[0], s.close()) for s in
-            [socket.socket(socket.AF_INET, socket.SOCK_DGRAM)]][0][1]])
-        if l][0][0])
+    # VALUE =  ([l for l in ([ip for ip in
+        # socket.gethostbyname_ex(socket.gethostname())[2] if not
+        # ip.startswith("127.")][:1], [[(s.connect(('8.8.8.8', 53)),
+            # s.getsockname()[0], s.close()) for s in
+            # [socket.socket(socket.AF_INET, socket.SOCK_DGRAM)]][0][1]])
+        # if l][0][0])
     # The real setup should use the following to get external IP. I am
     # using the one above since I use docker
-    # VALUE = str(ipgetter.myip())
+    VALUE = str(ipgetter.myip())
 
     factory = Factory()
     factory.protocol = PeARSearch
@@ -128,6 +153,8 @@ def main(args):
     reactor.callLater(0, storeValue, KEY, VALUE, node)
     reactor.listenTCP(8080, factory)
     print "Starting the DHT node..."
+    reactor.addSystemEventTrigger('before','shutdown', cleanup, KEY,
+            node)
     reactor.run()
 
 def parse_arguments(args=None):
