@@ -81,7 +81,7 @@ def lsh(vector):
     # TODO: Get the pear profile from the PeARS instance using the TODO API
     alpha.seek(0)
     alpha_array = numpy.loadtxt(alpha)
-    lsh_hash = (numpy.dot(alpha_array, vector) + beta)/W
+    lsh_hash = (numpy.dot(alpha_array, vector) + beta)%W
     return int(abs(math.floor(lsh_hash)))
 
 def cleanup(KEY, node):
