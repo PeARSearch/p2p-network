@@ -48,9 +48,10 @@ def getValue(p2p, key):
 def getValueCallback(result, p2p, key):
     """ Callback function that is invoked when the getValue() operation succeeds """
     if type(result) == dict:
-        print 'Value successfully retrieved: %s' % result[key]
+        IPs = result.values()
+        print 'Value successfully retrieved: %s' % IPs
         status = ' 200 OK\n'
-        body = result[key]
+        body = str(IPs)
     else:
         print 'Value not found'
         status = ' 404 Not Found\n'
@@ -97,13 +98,13 @@ def deleteValueCallback(result):
     """ Callback function that is invoked when the deleteValue() operation succeeds """
     print 'Key/value pair deleted'
     # Stop the script after 1 second
-    twisted.internet.reactor.callLater(1.0, stop)
+    reactor.callLater(1.0, stop)
 
 
 def stop():
     """ Stops the Twisted reactor, and thus the script """
     print '\nStopping Kademlia node and terminating script...'
-    twisted.internet.reactor.stop()
+    reactor.stop()
 
 def main(args):
     global node

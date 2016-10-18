@@ -232,6 +232,7 @@ class Node(object):
                     # ...and store the key/value pair
                     contact = result['closestNodeNoValue']
                     contact.store(key, result[key])
+                    result.pop('closestNodeNoValue')
                 outerDf.callback(result)
             else:
                 # The value wasn't found, but a list of contacts was returned
@@ -449,10 +450,18 @@ class Node(object):
                 # Update the "last accessed" timestamp for the appropriate k-bucket
                 self._routingTable.touchKBucket(key)
             if len(shortlist) == 0:
-                # This node doesn't know of any other nodes
-                fakeDf = defer.Deferred()
-                fakeDf.callback([])
-                return fakeDf
+                # It means, this is as close as it gets to finding the
+                # closest values. Return all the IPs in this node's
+                # datastore
+                retDf = defer.Deferred()
+                if findValue and rpc != 'delete':
+                    result = dict(self._dataStore)
+                    if 'nodeState' in result:
+                        result.pop('nodeState')
+                    retDf.callback(result)
+                else:
+                    retDf.callback([])
+                return retDf
         else:
             # This is used during the bootstrap process; node ID's are most probably fake
             shortlist = startupShortlist
