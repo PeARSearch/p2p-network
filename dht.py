@@ -59,8 +59,7 @@ def getValueCallback(result, p2p, key):
     length = len(body) if body else 0
     response_headers = {
         'Content-Type': 'text/html; encoding=utf8',
-        'Content-Length': length,
-        'Connection': 'close',
+        'Content-Length': length
     }
     response_headers_raw = '\n' + ''.join('%s: %s\n' % (k, v) for k, v in \
                                             response_headers.iteritems())
@@ -82,7 +81,7 @@ def lsh(vector):
     alpha.seek(0)
     alpha_array = numpy.loadtxt(alpha)
     lsh_hash = (numpy.dot(alpha_array, vector) + beta)%W
-    return int(abs(math.floor(lsh_hash)))
+    return str(lsh_hash)
 
 def cleanup(KEY, node):
     """ Removes the the specified key (KEY) its associated value from the DHT """
