@@ -5,7 +5,7 @@ import sys, os, re
 import requests
 from io import StringIO
 import cStringIO
-import argparse, socket, ipgetter
+import argparse, socket, urllib
 import numpy, math
 from twisted.internet import reactor
 from common_vars import alpha, beta, W
@@ -143,7 +143,7 @@ def main(args):
         # if l][0][0])
     # The real setup should use the following to get external IP. I am
     # using the one above since I use docker
-    VALUE = str(ipgetter.myip())
+    VALUE = urllib.urlopen('http://ip.42.pl/short').read().strip('\n')
 
     factory = Factory()
     factory.protocol = PeARSearch
