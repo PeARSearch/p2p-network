@@ -12,8 +12,10 @@ from common_vars import alpha, beta, W
 from entangled.node import EntangledNode
 from entangled.kademlia.datastore import SQLiteDataStore
 from twisted.internet.protocol import Factory, Protocol
+from stun import get_ip_info
 
 node = None
+behind_nat = False
 
 def storeValue(key, value, node):
     """ Stores the specified value in the DHT using the specified key """
@@ -21,6 +23,31 @@ def storeValue(key, value, node):
     # Store the value in the DHT. This method returns a Twisted Deferred result, which we then add callbacks to
     deferredResult = node.iterativeStore(key, value)
     deferredResult.addErrback(genericErrorCallback)
+    deferredResult.addCallback(check_for_connectivity)
+    if deferredResult.result:
+        deferredResult.addCallback(connect_to_supernode)
+    return deferredResult
+
+def check_for_connectivity(result):
+    #Trying to bind the External IP and a random port to a socket server.
+    #If it doesn't bind, let us assume that the IP does not belong to
+    #this machine only
+    try:
+        UDP_IP = urllib.urlopen('http://ip.42.pl/short').read().strip('\n')
+    except:
+        print "Error: Unable to reach outside network.\n"
+        sys.exit(0)
+    UDP_PORT = 8888
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.bind((UDP_IP, UDP_PORT))
+        sock.close()
+    except:
+        behind_nat = True
+    return behind_nat
+
+def connect_to_supernode(result):
+    return
 
 def genericErrorCallback(failure):
     """ Callback function that is invoked if an error occurs during any of the DHT operations """
@@ -143,14 +170,18 @@ def main(args):
         # if l][0][0])
     # The real setup should use the following to get external IP. I am
     # using the one above since I use docker
-    VALUE = urllib.urlopen('http://ip.42.pl/short').read().strip('\n')
+    try:
+        VALUE = urllib.urlopen('http://ip.42.pl/short').read().strip('\n')
+    except:
+        print "Error: Unable to reach outside network.\n"
+        sys.exit(0)
 
     factory = Factory()
     factory.protocol = PeARSearch
     factory.clients = []
     node = EntangledNode(udpPort=int(port), dataStore=data_store)
     node.joinNetwork(known_nodes)
-    reactor.callLater(0, storeValue, KEY, VALUE, node)
+    deferred = reactor.callLater(0, storeValue, KEY, VALUE, node)
     reactor.listenTCP(8080, factory)
     print "Starting the DHT node..."
     reactor.addSystemEventTrigger('before','shutdown', cleanup, KEY,
