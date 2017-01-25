@@ -12,10 +12,11 @@ from common_vars import alpha, beta, W
 from entangled.node import EntangledNode
 from entangled.kademlia.datastore import SQLiteDataStore
 from twisted.internet.protocol import Factory, Protocol
-from stun import get_ip_info
+import  subprocess
 
 node = None
 behind_nat = False
+supernode_IP = "139.162.23.202"
 
 def storeValue(key, value, node):
     """ Stores the specified value in the DHT using the specified key """
@@ -26,6 +27,7 @@ def storeValue(key, value, node):
     deferredResult.addCallback(check_for_connectivity)
     if deferredResult.result:
         deferredResult.addCallback(connect_to_supernode)
+        deferredResult.addCallback(populate_supernode_db)
     return deferredResult
 
 def check_for_connectivity(result):
@@ -46,8 +48,37 @@ def check_for_connectivity(result):
         behind_nat = True
     return behind_nat
 
-def connect_to_supernode(result):
+def populate_supernode_db(port):
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+    server_address = (supernode_IP, 9000)
+    print >>sys.stderr, 'connecting to %s port %s' % server_address
+    sock.connect(server_address)
+
+    try:
+            # Send data
+        IP = urllib.urlopen('http://ip.42.pl/short').read().strip('\n')
+        message = "{}:{}".format(IP,port)
+        print >>sys.stderr, 'sending "%s"' % message
+        sock.sendall(message)
+    finally:
+        print >>sys.stderr, 'closing socket'
+        sock.close()
     return
+
+
+def connect_to_supernode(result):
+    port_lower = 5001
+    port_upper = 7999
+    for via_port in range(port_lower, port_upper+1):
+        command = ["ssh", "-nNT", "-R", "8080:localhost:{}".format(via_port), "root@{}".format(supernode_IP)]
+        try:
+            retcode = subprocess.Popen(command)
+            return via_port
+        except:
+            continue
+    print "Error: Couldn't tunnel across our SSH server"
+    sys.exit()
 
 def genericErrorCallback(failure):
     """ Callback function that is invoked if an error occurs during any of the DHT operations """
@@ -97,6 +128,7 @@ def getValueCallback(result, p2p, key):
 
 class PeARSearch(Protocol):
     def dataReceived(self, query_vector):
+        print query_vector
         query = re.split(r'[\n\r]+', query_vector)
         query_vector = query[-1].strip('"').encode('utf-8')
         q = cStringIO.StringIO(query_vector)
@@ -176,13 +208,16 @@ def main(args):
         print "Error: Unable to reach outside network.\n"
         sys.exit(0)
 
-    factory = Factory()
-    factory.protocol = PeARSearch
-    factory.clients = []
     node = EntangledNode(udpPort=int(port), dataStore=data_store)
     node.joinNetwork(known_nodes)
     deferred = reactor.callLater(0, storeValue, KEY, VALUE, node)
+
+
+    factory = Factory()
+    factory.protocol = PeARSearch
+    factory.clients = []
     reactor.listenTCP(8080, factory)
+
     print "Starting the DHT node..."
     reactor.addSystemEventTrigger('before','shutdown', cleanup, KEY,
             node)
